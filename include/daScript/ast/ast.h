@@ -8,6 +8,7 @@
 #include "daScript/misc/rangetype.h"
 #include "daScript/simulate/data_walker.h"
 #include "daScript/simulate/debug_info.h"
+#include "daScript/ast/ast_serialize_macro.h"
 #include "daScript/ast/compilation_errors.h"
 #include "daScript/ast/ast_typedecl.h"
 #include "daScript/simulate/aot_library.h"
@@ -22,6 +23,8 @@
 
 namespace das
 {
+    struct AstSerializer;
+
     class Function;
     typedef smart_ptr<Function> FunctionPtr;
 
@@ -94,6 +97,7 @@ namespace das
             : type(Type::tFloat), name(n), fValue(f), at(loc) {}
         AnnotationArgument ( const string & n, AnnotationArgumentList * al, const LineInfo & loc = LineInfo() )
             : type(Type::none), name(n), aList(al), at(loc) {}
+        void serialize ( AstSerializer & ser );
     };
 
     typedef vector<AnnotationArgument> AnnotationArguments;
@@ -102,6 +106,7 @@ namespace das
         const AnnotationArgument * find ( const string & name, Type type ) const;
         bool getBoolOption(const string & name, bool def = false) const;
         int32_t getIntOption(const string & name, int32_t def = false) const;
+        void serialize ( AstSerializer & ser );
     };
 
     struct Annotation : BasicAnnotation {
@@ -131,6 +136,7 @@ namespace das
             uint32_t            flags;
         };
         string getMangledName() const;
+        void serialize( AstSerializer & ser );
     };
     typedef smart_ptr<AnnotationDeclaration> AnnotationDeclarationPtr;
 
@@ -145,6 +151,7 @@ namespace das
             string          cppName;
             LineInfo        at;
             ExpressionPtr   value;
+            void serialize ( AstSerializer & ser );
         };
     public:
         Enumeration() = default;
@@ -162,6 +169,7 @@ namespace das
         TypeDeclPtr makeBaseType() const;
         Type getEnumType() const;
         TypeDeclPtr makeEnumType() const;
+        void serialize ( AstSerializer & ser );
     public:
         string              name;
         string              cppName;
@@ -215,6 +223,7 @@ namespace das
                     }
                 }
             }
+            void serialize ( AstSerializer & ser );
         };
     public:
         Structure() {}
@@ -249,6 +258,7 @@ namespace das
         string describe() const { return name; }
         string getMangledName() const;
         bool hasAnyInitializers() const;
+        void serialize( AstSerializer & ser );
     public:
         string                          name;
         vector<FieldDeclaration>        fields;
@@ -289,6 +299,7 @@ namespace das
         uint64_t getMangledNameHash() const;
         bool isAccessUnused() const;
         bool isCtorInitialized() const;
+        void serialize ( AstSerializer & ser );
         string          name;
         string          aka;        // name alias
         TypeDeclPtr     type;
@@ -671,6 +682,7 @@ namespace das
         virtual bool rtti_isConstant() const override { return true; }
         template <typename QQ> QQ & cvalue() { return *((QQ *)&value); }
         template <typename QQ> const QQ & cvalue() const { return *((const QQ *)&value); }
+        virtual void serialize ( AstSerializer & ser ) override;
         Type    baseType = Type::none;
         vec4f   value = v_zero();
       };
@@ -727,6 +739,7 @@ namespace das
         Function *  func = nullptr;
         InferHistory() = default;
         InferHistory(const LineInfo & a, const FunctionPtr & p) : at(a), func(p.get()) {}
+        void serialize ( AstSerializer & ser );
     };
     class Function : public ptr_ref_count {
     public:
@@ -790,6 +803,7 @@ namespace das
             Variable *  var = nullptr;
             Function *  func = nullptr;
             bool        viaPointer = false;
+            void serialize ( AstSerializer & ser );
         };
         vector<AliasInfo>  resultAliasesGlobals;
     // end of what we use for alias checking
@@ -1008,10 +1022,12 @@ namespace das
         TypeDeclPtr findAlias ( const string & name ) const;
         VariablePtr findVariable ( const string & name ) const;
         FunctionPtr findFunction ( const string & mangledName ) const;
+        FunctionPtr findGeneric ( const string & mangledName ) const;
         FunctionPtr findUniqueFunction ( const string & name ) const;
         StructurePtr findStructure ( const string & name ) const;
         AnnotationPtr findAnnotation ( const string & name ) const;
         EnumerationPtr findEnum ( const string & name ) const;
+        ReaderMacroPtr findReaderMacro ( const string & name ) const;
         TypeInfoMacroPtr findTypeInfoMacro ( const string & name ) const;
         ExprCallFactory * findCall ( const string & name ) const;
         bool isVisibleDirectly ( Module * objModule ) const;
@@ -1031,6 +1047,7 @@ namespace das
         void verifyAotReady();
         void verifyBuiltinNames(uint32_t flags);
         void addDependency ( Module * mod, bool pub );
+        void serialize( AstSerializer & ser );
     public:
         template <typename RecAnn>
         void initRecAnnotation ( const smart_ptr<RecAnn> & rec, ModuleLibrary & lib ) {
@@ -1257,7 +1274,7 @@ namespace das
         EnumInfo * makeEnumDebugInfo ( const Enumeration & en );
         FuncInfo * makeInvokeableTypeDebugInfo ( const TypeDeclPtr & blk, const LineInfo & at );
         void appendLocalVariables ( FuncInfo * info, const ExpressionPtr & body );
-         void appendGlobalVariables ( FuncInfo * info, const FunctionPtr & body );
+        void appendGlobalVariables ( FuncInfo * info, const FunctionPtr & body );
         void logMemInfo ( TextWriter & tw );
     public:
         shared_ptr<DebugInfoAllocator>  debugInfo;
@@ -1378,6 +1395,7 @@ namespace das
         void finalizeAnnotations();
         bool patchAnnotations();
         void fixupAnnotations();
+        void normalizeOptionTypes ();
         void inferTypes(TextWriter & logs, ModuleGroup & libGroup);
         void inferTypesDirty(TextWriter & logs, bool verbose);
         void lint (TextWriter & logs, ModuleGroup & libGroup );
@@ -1427,6 +1445,7 @@ namespace das
         bool getProfiler() const;
         void makeMacroModule( TextWriter & logs );
         vector<ReaderMacroPtr> getReaderMacro ( const string & markup ) const;
+        void serialize ( AstSerializer & ser );
     protected:
         // this is no longer the way to link AOT
         //  set CodeOfPolicies::aot instead
@@ -1551,67 +1570,6 @@ namespace das
         static DAS_THREAD_LOCAL daScriptEnvironment * bound;
         static DAS_THREAD_LOCAL daScriptEnvironment * owned;
         static void ensure();
-    };
-
-    struct AstSerializer {
-        FileAccess *        fileAccess = nullptr;
-        ModuleLibrary *     moduleLibrary = nullptr;
-        Module *            thisModule = nullptr;
-        Module *            astModule = nullptr;
-        bool                writing = false;
-        size_t              readOffset = 0;
-        vector<uint8_t>     buffer;
-        das_hash_map<uint64_t,FunctionPtr>  functionMap;
-        vector<pair<Function **,uint64_t>>  functionRefs;
-        AstSerializer ( const vector<uint8_t> & from );
-        AstSerializer ( void );
-        AstSerializer ( const AstSerializer & from ) = delete;
-        AstSerializer & operator = ( const AstSerializer & from ) = delete;
-        void write ( void * data, size_t size );
-        void read  ( const void * data, size_t size );
-        void serialize ( void * data, size_t size );
-        void tag ( const char * name );
-        void patch();
-        AstSerializer & operator << ( bool & value ) { serialize(&value, sizeof(value)); return *this; }
-        AstSerializer & operator << ( int64_t & value ) { serialize(&value, sizeof(value)); return *this; }
-        AstSerializer & operator << ( uint64_t & value ) { serialize(&value, sizeof(value)); return *this; }
-        AstSerializer & operator << ( int32_t & value ) { serialize(&value, sizeof(value)); return *this; }
-        AstSerializer & operator << ( uint32_t & value ) { serialize(&value, sizeof(value)); return *this; }
-        AstSerializer & operator << ( TypeDeclPtr & type );
-        AstSerializer & operator << ( ExpressionPtr & expr );
-        AstSerializer & operator << ( FunctionPtr & func );
-        AstSerializer & operator << ( Function * & func );
-        AstSerializer & operator << ( Type & baseType );
-        AstSerializer & operator << ( string & str );
-        AstSerializer & operator << ( LineInfo & at );
-        AstSerializer & operator << ( FileInfo * & info );
-        AstSerializer & operator << ( Module * & module );
-        template <typename TT>
-        AstSerializer & operator << ( vector<TT> & value ) {
-            if ( writing ) {
-                uint32_t size = (uint32_t) value.size();
-                *this << size;
-            } else {
-                uint32_t size = 0;
-                *this << size;
-                value.resize(size);
-            }
-            for ( auto & v : value ) {
-                *this << v;
-            }
-            return *this;
-        }
-        template <typename EnumType>
-        void serialize_enum ( EnumType & baseType ) {
-            if ( writing ) {
-                uint32_t bt = (uint32_t) baseType;
-                *this << bt;
-            } else {
-                uint32_t bt = 0;
-                *this << bt;
-                baseType = (EnumType) bt;
-            }
-        }
     };
 }
 
