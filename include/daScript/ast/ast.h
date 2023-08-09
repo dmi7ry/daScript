@@ -66,6 +66,13 @@ namespace das
 
     struct AnnotationArgumentList;
     struct AnnotationDeclaration;
+    typedef smart_ptr<AnnotationDeclaration> AnnotationDeclarationPtr;
+
+    enum class LogicAnnotationOp { And, Or, Xor, Not };
+    AnnotationPtr newLogicAnnotation ( LogicAnnotationOp op );
+    AnnotationPtr newLogicAnnotation ( LogicAnnotationOp op,
+        const AnnotationDeclarationPtr & arg0, const AnnotationDeclarationPtr & arg1 );
+
 
     //      [annotation (value,value,...,value)]
     //  or  [annotation (key=value,key,value,...,key=value)]
@@ -122,6 +129,7 @@ namespace das
         string describe() const { return name; }
         string getMangledName() const;
         virtual void log ( TextWriter & ss, const AnnotationDeclaration & decl ) const;
+        virtual void serialize( AstSerializer & ) { }
         Module *    module = nullptr;
     };
 
@@ -138,7 +146,6 @@ namespace das
         string getMangledName() const;
         void serialize( AstSerializer & ser );
     };
-    typedef smart_ptr<AnnotationDeclaration> AnnotationDeclarationPtr;
 
     typedef vector<AnnotationDeclarationPtr> AnnotationList;
 
@@ -780,7 +787,7 @@ namespace das
             result = td;
             return this;
         }
-        Function * getOrigin() const;
+        FunctionPtr getOrigin() const;
         void serialize ( AstSerializer & ser );
     public:
         AnnotationList      annotations;
@@ -881,7 +888,7 @@ namespace das
             uint32_t    sideEffectFlags = 0;
         };
         vector<InferHistory> inferStack;
-        Function * fromGeneric = nullptr;
+        FunctionPtr fromGeneric = nullptr;
         uint64_t hash = 0;
         uint64_t aotHash = 0;
 #if DAS_MACRO_SANITIZER
@@ -1109,6 +1116,7 @@ namespace das
                 bool    isModule : 1;
                 bool    isSolidContext : 1;
                 bool    doNotAllowUnsafe : 1;
+                bool    wasParsedNameless : 1;
             };
             uint32_t        moduleFlags = 0;
         };

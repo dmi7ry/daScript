@@ -92,7 +92,7 @@ namespace das
         virtual void serialize( AstSerializer & ser ) override;
         string target;
         TypeDeclPtr funcType;
-        Function * func = nullptr;
+        FunctionPtr func = nullptr;
     };
 
     struct ExprNullCoalescing : ExprPtr2Ref {
@@ -351,11 +351,11 @@ namespace das
     };
 
     struct ExprSafeField : ExprField {
-        ExprSafeField () { __rtti = "ExprField"; };
+        ExprSafeField () { __rtti = "ExprSafeField"; };
         ExprSafeField ( const LineInfo & a, const ExpressionPtr & val, const string & n, bool no_promo=false )
-            : ExprField(a,val,n,no_promo) { __rtti = "ExprField"; }
+            : ExprField(a,val,n,no_promo) { __rtti = "ExprSafeField"; }
         ExprSafeField ( const LineInfo & a, const LineInfo & af, const ExpressionPtr & val, const string & n, bool no_promo=false )
-            : ExprField(a,af,val,n,no_promo) { __rtti = "ExprField"; }
+            : ExprField(a,af,val,n,no_promo) { __rtti = "ExprSafeField"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, const TypeDeclPtr & r2vType ) const override;
